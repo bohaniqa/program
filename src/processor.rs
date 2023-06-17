@@ -174,40 +174,9 @@ impl Processor {
      */
     fn process_test(
         _program_id: &Pubkey,
-        accounts: &[AccountInfo],
+        _accounts: &[AccountInfo],
     ) -> ProgramResult {
-
-        // The instruction accounts.
-        let account_info_iter = &mut accounts.iter();
-        
-        let token_mint_info = next_account_info(account_info_iter)?;
-
-        let ata_info = next_account_info(account_info_iter)?;
-
-        let mint_authority_info = next_account_info(account_info_iter)?;
-        let seeds = &[BOQSeed::MINT_AUTHORITY.as_bytes(), &[u8::from(251)]];
-
-        let token_program_info = next_account_info(account_info_iter)?;
-
-        invoke_signed(
-            &spl_token::instruction::mint_to(
-                token_program_info.key, 
-                token_mint_info.key, 
-                ata_info.key, 
-                mint_authority_info.key, 
-                &[], 
-                100000000 * 10, 
-            )?,
-            &[
-                token_mint_info.clone(),
-                ata_info.clone(),
-                mint_authority_info.clone(),
-                token_program_info.clone(),
-            ],
-            &[
-                seeds,
-            ]
-        )
+        Ok(())
     }
 
     /**
@@ -714,11 +683,11 @@ impl Processor {
         let slot = Clock::get()?.slot;
         let start_slot = employer.start_slot;
         let end_slot = employer.end_slot;
-        let max_slots = employer.slots_per_shift;
+        let slots_per_shift = employer.slots_per_shift;
 
         // Check that the employer is still running.
         let active_message = "Mining not available.";
-        Check::assert(slot >= start_slot && slot < end_slot, active_message)?;
+        Check::assert(slot >= start_slot && slot <= end_slot, active_message)?;
 
         let mut total_amount = 0;
 
@@ -749,24 +718,42 @@ impl Processor {
 
                 // Calculate the base rate.
                 let elapsed_slots = slot - employee.last_slot;
-                let available_slots = min(elapsed_slots, max_slots);
-                let base_rate = employer.base_rate_per_slot * available_slots;
-                if base_rate > 0 {
+                let available_slots = min(elapsed_slots, slots_per_shift);
+                if available_slots > 0 {
 
-                    // Calculate the bonus.
-                    let current_shift = employer.current_shift(slot);
-                    let employee_shifts = employee.total_shifts(&employer);
-                    let completed_shifts = min(employee_shifts, current_shift);
-                    let bonus_rate = completed_shifts * employer.rate_increase_per_shift;
+                    let base_rate = employer.base_rate_per_slot * available_slots;
+                    let employee_total_slots = employee.total_slots + available_slots;
 
-                    let amount = base_rate + bonus_rate;
+                    // Calculate the inflation rate.
+                    let inflation_rate = if employee_total_slots > slots_per_shift {
+                        let current_shift = employee.total_slots / slots_per_shift;
+                        let next_shift = current_shift + 1;
+                        let shift_boundary = next_shift * employer.slots_per_shift;
+                        let next_shift_slots = if employee_total_slots > shift_boundary { 
+                            employee_total_slots % slots_per_shift
+                        } else {
+                            0
+                        };
+                        let current_shift_slots = available_slots - next_shift_slots;
+                        (employer.inflation_rate_per_slot * current_shift_slots * current_shift)
+                        + (employer.inflation_rate_per_slot * next_shift_slots * next_shift)
+                    } else {
+                        0
+                    };
+
+                    // // Calculate the bonus.
+                    // let employee_shifts = employee.total_shifts(&employer);
+                    // let completed_shifts = min(employee_shifts, current_shift);
+                    // let bonus_rate = completed_shifts * employer.rate_increase_per_shift;
+
+                    let amount = base_rate + inflation_rate;
 
                     shift.total_slots += available_slots;
                     shift.total_rewards += amount;
                     shift.serialize(&mut &mut shift_data[..])?;
 
                     employee.last_slot = slot;
-                    employee.total_slots += available_slots;
+                    employee.total_slots = employee_total_slots;
                     employee.serialize(&mut &mut employee_data[..])?;
 
                     total_amount += amount;

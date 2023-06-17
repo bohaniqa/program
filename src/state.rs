@@ -85,7 +85,7 @@ pub struct BOQEmployer {
     pub end_slot: Slot,
     pub slots_per_shift: u64,
     pub base_rate_per_slot: u64,
-    pub rate_increase_per_shift: u64,
+    pub inflation_rate_per_slot: u64,
 
     pub token_mint: Pubkey,
     pub collection_mint: Pubkey,
@@ -135,19 +135,19 @@ impl BOQEmployer {
             end_slot: start_slot + (u64::from(max_shifts) * slots_per_shift),
             slots_per_shift,
             base_rate_per_slot,
-            rate_increase_per_shift: (base_rate_per_slot * slots_per_shift) / 100,
+            inflation_rate_per_slot: base_rate_per_slot / 1000,
             token_mint,
             collection_mint,
         }
     }
 
-    pub fn current_shift(&self, slot: Slot) -> u64 {
-        if slot < self.start_slot { 
-            0 
-        } else { 
-            (slot - self.start_slot) / self.slots_per_shift 
-        }
-    }
+    // pub fn current_shift(&self, slot: Slot) -> u64 {
+    //     if slot < self.start_slot { 
+    //         0 
+    //     } else { 
+    //         (slot - self.start_slot) / self.slots_per_shift 
+    //     }
+    // }
 }
 
 /***************************************************************************************************
@@ -193,9 +193,9 @@ impl BOQEmployee {
         }
     }
 
-    pub fn total_shifts(&self, employer: &BOQEmployer) -> u64 {
-        self.total_slots / employer.slots_per_shift
-    }
+    // pub fn total_shifts(&self, employer: &BOQEmployer) -> u64 {
+    //     self.total_slots / employer.slots_per_shift
+    // }
 }
 
 /***************************************************************************************************
