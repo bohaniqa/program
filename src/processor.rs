@@ -719,16 +719,19 @@ impl Processor {
                 // Calculate the base rate.
                 let elapsed_slots = slot - employee.last_slot;
                 let available_slots = min(elapsed_slots, slots_per_shift);
+                let total_slots = employee.total_slots;
                 if available_slots > 0 {
 
                     let base_rate = employer.base_rate_per_slot * available_slots;
-                    let employee_total_slots = employee.total_slots + available_slots;
+                    let employee_total_slots = total_slots + available_slots;
 
                     // Calculate the inflation rate.
-                    let inflation_rate = if employee_total_slots > slots_per_shift {
-                        let current_shift = employee.total_slots / slots_per_shift;
+                    let inflation_rate = if employee_total_slots < slots_per_shift {
+                        0
+                    } else {
+                        let current_shift = total_slots / slots_per_shift;
                         let next_shift = current_shift + 1;
-                        let shift_boundary = next_shift * employer.slots_per_shift;
+                        let shift_boundary = next_shift * slots_per_shift;
                         let next_shift_slots = if employee_total_slots > shift_boundary { 
                             employee_total_slots % slots_per_shift
                         } else {
@@ -737,8 +740,6 @@ impl Processor {
                         let current_shift_slots = available_slots - next_shift_slots;
                         (employer.inflation_rate_per_slot * current_shift_slots * current_shift)
                         + (employer.inflation_rate_per_slot * next_shift_slots * next_shift)
-                    } else {
-                        0
                     };
 
                     // // Calculate the bonus.
